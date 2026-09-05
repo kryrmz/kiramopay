@@ -993,6 +993,22 @@ func (s *Service) persistTokenRollout(
 		UserAgent:  lc.UserAgent,
 		ExpiresAt:  tokens.RefreshExpiry,
 	}
+	// Una sesion es UN DISPOSITIVO, no un par de tokens. En una rotacion se
+	// mueve la fila que ya existe; solo un login o un registro (parentJTI
+	// vacio) abren una nueva. Insertar en cada rotacion llenaba la pantalla de
+	// dispositivos con el mismo aparato repetido y convertia "cerrar sesion" en
+	// una forma de deslogearse a uno mismo.
+	if parentJTI != "" {
+		movida, err := s.authRepo.MoverSesionAlRotar(ctx, userID, parentJTI, sess)
+		if err != nil {
+			return err
+		}
+		if movida {
+			return nil
+		}
+		// Sin fila que mover (revocada, o de antes de este cambio): se crea una
+		// para que la rotacion no falle y el dispositivo siga listado.
+	}
 	return s.authRepo.CreateSession(ctx, sess)
 }
 
