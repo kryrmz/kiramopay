@@ -187,3 +187,110 @@ func TestRevokeAllSessions_ConYSinExcepcion(t *testing.T) {
 		t.Fatalf("familias vivas = %d, esperaba 0", vivos)
 	}
 }
+
+// EL DEFECTO QUE ESTO CIERRA: cada rotacion de token insertaba una fila NUEVA
+// de sesion y no revocaba la anterior. Con un token de acceso de quince
+// minutos, un telefono en uso acumulaba una sesion "activa" cada cuarto de
+// hora durante toda la vida del refresh — siete dias. La pantalla mostraba el
+// mismo aparato repetido decenas de veces, con una sola marcada como actual.
+//
+// Y cerrar una de esas filas era peor que inutil: todas comparten familia de
+// refresh, y cerrar revoca la familia entera. El usuario mataba su PROPIA
+// sesion creyendo que cerraba la de un extrano.
+//
+// Sin el arreglo esta prueba falla: hay dos sesiones donde deberia haber una.
+func TestRefresh_NoDuplicaLaSesionDelMismoDispositivo(t *testing.T) {
+	env := armarEntornoBloqueo(t)
+	ctx := context.Background()
+	sesion := registerTestUser(t, env.svc)
+
+	antes, err := env.authRepo.ListActiveSessions(ctx, sesion.User.ID, sesion.Tokens.AccessJTI)
+	if err != nil {
+		t.Fatalf("ListActiveSessions: %v", err)
+	}
+	if len(antes) != 1 {
+		t.Fatalf("sesiones tras el registro = %d, esperaba 1", len(antes))
+	}
+
+	// Tres rotaciones seguidas, como haria un telefono a lo largo de una hora.
+	tokens := sesion.Tokens
+	for i := 0; i < 3; i++ {
+		nuevos, err := env.svc.Refresh(ctx, tokens.RefreshToken, auth.LoginContext{
+			IPAddress: "10.0.0.1", UserAgent: "Pruebas",
+		})
+		if err != nil {
+			t.Fatalf("rotacion %d: %v", i+1, err)
+		}
+		tokens = nuevos
+	}
+
+	despues, err := env.authRepo.ListActiveSessions(ctx, sesion.User.ID, tokens.AccessJTI)
+	if err != nil {
+		t.Fatalf("ListActiveSessions tras rotar: %v", err)
+	}
+	if len(despues) != 1 {
+		t.Fatalf("sesiones tras tres rotaciones = %d, esperaba 1: el mismo dispositivo no puede aparecer repetido", len(despues))
+	}
+	// Y la fila que queda es la del dispositivo actual, con su hora de entrada
+	// original: la pantalla dice cuando entro, no cuando renovo.
+	if !despues[0].Current {
+		t.Error("la sesion que queda no esta marcada como la actual")
+	}
+	if despues[0].ID != antes[0].ID {
+		t.Error("la rotacion cambio la identidad de la sesion en vez de moverla")
+	}
+	if !despues[0].CreatedAt.Equal(antes[0].CreatedAt) {
+		t.Error("la rotacion movio la hora de entrada del dispositivo")
+	}
+	// El vencimiento SI avanza: la sesion vive lo que su refresh mas nuevo.
+	if !despues[0].ExpiresAt.After(antes[0].ExpiresAt) {
+		t.Error("el vencimiento de la sesion no avanzo con la rotacion")
+	}
+}
+
+// Y cerrar la sesion de OTRO dispositivo no puede tumbar la propia. Antes, con
+// las filas duplicadas, cualquiera de las viejas compartia familia con la viva.
+func TestRevokeSessionByID_TrasRotarNoMataLaSesionPropia(t *testing.T) {
+	env := armarEntornoBloqueo(t)
+	ctx := context.Background()
+	propia := registerTestUser(t, env.svc)
+	otra := entrar(t, env)
+
+	// La propia rota varias veces, como un telefono en uso.
+	tokens := propia.Tokens
+	for i := 0; i < 3; i++ {
+		nuevos, err := env.svc.Refresh(ctx, tokens.RefreshToken, auth.LoginContext{})
+		if err != nil {
+			t.Fatalf("rotacion %d: %v", i+1, err)
+		}
+		tokens = nuevos
+	}
+
+	sesiones, err := env.authRepo.ListActiveSessions(ctx, propia.User.ID, tokens.AccessJTI)
+	if err != nil {
+		t.Fatalf("ListActiveSessions: %v", err)
+	}
+	// Se cierra la que NO es la actual: la del otro dispositivo.
+	var ajena string
+	for _, s := range sesiones {
+		if !s.Current {
+			ajena = s.ID
+			break
+		}
+	}
+	if ajena == "" {
+		t.Fatal("no se encontro una sesion distinta de la propia")
+	}
+	if _, err := env.authRepo.RevokeSessionByID(ctx, propia.User.ID, ajena); err != nil {
+		t.Fatalf("RevokeSessionByID: %v", err)
+	}
+
+	// La propia sigue viva: puede renovar.
+	if _, err := env.svc.Refresh(ctx, tokens.RefreshToken, auth.LoginContext{}); err != nil {
+		t.Fatalf("cerrar la sesion ajena dejo fuera a la propia: %v", err)
+	}
+	// Y la ajena no.
+	if _, err := env.svc.Refresh(ctx, otra.Tokens.RefreshToken, auth.LoginContext{}); err == nil {
+		t.Fatal("la sesion cerrada pudo renovar")
+	}
+}

@@ -52,6 +52,46 @@ func (r *Repository) CreateSession(ctx context.Context, s *SessionRecord) error 
 	return err
 }
 
+// MoverSesionAlRotar apunta la fila de sesion del dispositivo al par de tokens
+// nuevo, en vez de crear otra.
+//
+// Antes cada rotacion insertaba una fila mas y no revocaba la anterior. Con un
+// token de acceso de quince minutos, un telefono en uso acumulaba una sesion
+// "activa" cada cuarto de hora durante toda la vida del refresh. La pantalla de
+// dispositivos mostraba el MISMO aparato repetido decenas de veces, con una
+// sola marcada como la actual, y quien viera esas filas creia que alguien mas
+// habia entrado.
+//
+// Y cerrarlas era peor que inutil: RevokeSessionByID revoca la FAMILIA de
+// refresh —correctamente, porque el dispositivo tiene el ultimo token de la
+// cadena— y todas esas filas comparten familia. Cerrar una fila vieja mataba la
+// sesion viva del propio aparato desde el que se estaba cerrando: seguia
+// funcionando hasta quince minutos y despues quedaba fuera.
+//
+// created_at NO se toca: es cuando ese dispositivo entro, que es lo que la
+// pantalla muestra. La IP y el user agent si se refrescan, para que diga donde
+// esta el aparato ahora.
+//
+// Devuelve false si no habia fila que mover (revocada, o creada antes de este
+// cambio); el llamante crea una entonces, para que una rotacion nunca falle por
+// esto.
+func (r *Repository) MoverSesionAlRotar(ctx context.Context, userID, parentRefreshJTI string, s *SessionRecord) (bool, error) {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE user_sessions
+		    SET access_jti = $3::uuid, refresh_jti = $4::uuid, expires_at = $5,
+		        token_hash = $3::text, refresh_token_hash = $4::text,
+		        ip_address = COALESCE(NULLIF($6,'')::inet, ip_address),
+		        user_agent = COALESCE(NULLIF($7,''), user_agent)
+		  WHERE user_id = $1::uuid AND refresh_jti = $2::uuid AND revoked_at IS NULL`,
+		userID, parentRefreshJTI, s.AccessJTI, s.RefreshJTI, s.ExpiresAt,
+		s.IPAddress, s.UserAgent,
+	)
+	if err != nil {
+		return false, fmt.Errorf("mover sesion al rotar: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *Repository) RevokeSessionByAccessJTI(ctx context.Context, jti string) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE user_sessions SET revoked_at = NOW() WHERE access_jti = $1 AND revoked_at IS NULL`,
