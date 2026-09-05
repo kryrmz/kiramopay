@@ -126,7 +126,7 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Warn("app version: ningun camino a GitHub funciono", "err", err)
-		h.responderCacheViejaOFallo(w)
+		h.responderCacheViejaOFallo(w, plataforma)
 		return
 	}
 
@@ -229,11 +229,17 @@ func (h *Handler) desdeRedireccion(r *http.Request) (*infoVersion, error) {
 
 // Con GitHub caido, una cache vencida sigue siendo mejor que nada; sin cache,
 // 503 honesto.
-func (h *Handler) responderCacheViejaOFallo(w http.ResponseWriter) {
+//
+// Recibe la plataforma y adapta igual que los dos caminos de exito. Sin eso
+// devolvia la cache TAL CUAL, y la cache siempre guarda la variante de Android:
+// un cliente iOS con la cache vencida y GitHub caido recibia la URL del .apk,
+// un archivo que en iOS no se puede instalar. Es justo la confusion que la
+// respuesta por plataforma vino a evitar.
+func (h *Handler) responderCacheViejaOFallo(w http.ResponseWriter, plataforma string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.cache != nil {
-		response.JSON(w, http.StatusOK, *h.cache)
+		response.JSON(w, http.StatusOK, h.paraPlataforma(*h.cache, plataforma))
 		return
 	}
 	response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "version check failed")

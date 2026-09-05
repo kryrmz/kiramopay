@@ -32,8 +32,13 @@ type EventSink interface {
 // HistoryRecorder mirrors payout money movements into the user's transaction
 // list. The ledger posting itself happens here, in payout; this only writes the
 // human-visible history row.
+// HistoryRecorder anota el movimiento en el historial del usuario y presta el
+// control de tope diario del servicio de transacciones. Van juntas: lo que
+// debita la billetera tiene que anotarse donde el tope se cuenta Y consultar
+// ese mismo tope, o el tope deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
+	CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
 // Logger is the minimal logging surface (slog-compatible) the poller/service
@@ -121,6 +126,15 @@ func (s *Service) Create(ctx context.Context, userID string, req *CreateRequest)
 	}
 	if bal < p.AmountMinor {
 		return nil, ErrInsufficient
+	}
+
+	// Mismo tope diario que las transferencias y el escrow: un payout debita la
+	// billetera contra SYSTEM:EXTERNAL igual que ellos. Va ANTES del MFA y de
+	// reclamar la fila, para no dejar nada a medias cuando el tope frena.
+	if s.history != nil {
+		if err := s.history.CheckDailyLimit(ctx, userID, p.Currency, p.AmountMinor); err != nil {
+			return nil, err
+		}
 	}
 
 	// High-value MFA gate (same purpose as transfers/escrow, so one verified

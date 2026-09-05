@@ -21,6 +21,10 @@ func TestDailyOutgoingMinor_CuentaTodosLosCaminosDeSalida(t *testing.T) {
 		// El que faltaba: financiar un escrow saca dinero de la billetera del
 		// comprador igual que una transferencia.
 		"escrow_fund",
+		// Y estos dos, que tambien debitan la billetera contra una contraparte
+		// externa. Hoy ninguno opera en produccion, pero la lista describe lo
+		// que ES una salida, no lo que esta encendido.
+		"payout_sent", "marketplace",
 	}
 	for _, tipo := range salientes {
 		if !strings.Contains(consulta, "'"+tipo+"'") {

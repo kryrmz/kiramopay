@@ -13,7 +13,10 @@ import type { QRMerchant, QRPayment } from '@/api/repositories/qrpayment.reposit
 vi.mock('@/api', () => ({
   getApiLayer: () => ({
     qrPayments: {
-      getMerchantBalance: vi.fn().mockResolvedValue({ success: true, data: 1000 }),
+      // Distinto del total de la ventana a proposito: con los dos en 1000, la
+      // asercion sobre '₡1000.00' encontraba DOS nodos y pasaba solo porque el
+      // saldo del comercio todavia no habia resuelto su microtarea.
+      getMerchantBalance: vi.fn().mockResolvedValue({ success: true, data: 777 }),
       getCatalog: vi.fn().mockResolvedValue({ success: true, data: [] }),
       getLocations: vi.fn().mockResolvedValue({ success: true, data: [] }),
     },

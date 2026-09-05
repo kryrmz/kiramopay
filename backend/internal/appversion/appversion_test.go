@@ -1,6 +1,7 @@
 package appversion
 
 import (
+	"strings"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -238,5 +239,56 @@ func TestPlataforma_ToleraMayusculasYEspacios(t *testing.T) {
 	code, info := pedirPlataforma(t, conCacheYCanal("https://testflight.apple.com/join/abc"), "?platform=%20iOS%20")
 	if code != http.StatusOK || info.URL == "" {
 		t.Fatalf("code=%d info=%+v, esperaba resolver iOS igual", code, info)
+	}
+}
+
+// EL DEFECTO QUE ESTO CIERRA: con GitHub caido y la cache vencida, la respuesta
+// salia TAL CUAL de la cache — y la cache siempre guarda la variante de Android.
+// Un cliente iOS recibia la URL del .apk, un archivo que en iOS no se puede
+// instalar. Es justo la confusion que la respuesta por plataforma vino a evitar,
+// y aparecia solo en el momento en que mas molesta: cuando GitHub no responde.
+//
+// Sin el arreglo esta prueba falla: la URL devuelta termina en .apk.
+func TestGetLatest_ConCacheViejaIOSNoRecibeElAPK(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, false)
+	defer web.Close()
+
+	h := handlerDePrueba(api.URL, web.URL)
+	h.iosUpdateURL = "https://apps.apple.com/app/kiramopay"
+	h.cache = &infoVersion{Version: "2.3.5", URL: "https://ejemplo/viejo.apk"}
+	h.cachedAt = time.Now().Add(-time.Hour)
+
+	code, info := pedirPlataforma(t, h, "?platform=ios")
+	if code != http.StatusOK {
+		t.Fatalf("code=%d, esperaba 200 desde la cache vieja", code)
+	}
+	if info.Version != "2.3.5" {
+		t.Fatalf("version=%q, esperaba la de la cache", info.Version)
+	}
+	if strings.HasSuffix(info.URL, ".apk") {
+		t.Fatalf("un cliente iOS recibio la URL del APK: %q", info.URL)
+	}
+	if info.URL != h.iosUpdateURL {
+		t.Fatalf("url=%q, esperaba el canal de iOS", info.URL)
+	}
+}
+
+// Y android sigue recibiendo el .apk de la cache, que es lo correcto para el.
+func TestGetLatest_ConCacheViejaAndroidSiRecibeElAPK(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, false)
+	defer web.Close()
+
+	h := handlerDePrueba(api.URL, web.URL)
+	h.iosUpdateURL = "https://apps.apple.com/app/kiramopay"
+	h.cache = &infoVersion{Version: "2.3.5", URL: "https://ejemplo/viejo.apk"}
+	h.cachedAt = time.Now().Add(-time.Hour)
+
+	_, info := pedirPlataforma(t, h, "?platform=android")
+	if !strings.HasSuffix(info.URL, ".apk") {
+		t.Fatalf("android no recibio el APK: %q", info.URL)
 	}
 }
