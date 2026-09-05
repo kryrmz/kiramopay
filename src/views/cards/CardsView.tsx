@@ -165,6 +165,17 @@ export const CardsView: React.FC = () => {
         </div>
       ) : (
         <>
+          {/* El fallo de congelar, cambiar limites o cancelar se escribia en
+              `error`, pero el unico sitio que lo pintaba estaba dentro del
+              estado vacio — la rama que NO se muestra cuando hay tarjeta. Es
+              decir: justo las acciones que solo existen teniendo una tarjeta
+              fallaban en silencio. */}
+          {error && (
+            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">
+              {error}
+            </p>
+          )}
+
           {/* Card Visual */}
           <div className="relative h-56 w-full max-w-md mx-auto perspective-1000">
             <div className={`relative w-full h-full rounded-3xl p-6 text-white uv-shadow-floating overflow-hidden uv-gradient-brand ${frozen ? 'grayscale opacity-90' : ''}`}>

@@ -16,6 +16,13 @@ interface RegisterViewProps {
 
 type Step = 'phone' | 'otp' | 'cedula' | 'name' | 'usuario' | 'password';
 
+// El orden de los pasos, en UN solo lugar. Estaba escrito dos veces a mano —en
+// la barra de progreso y en la flecha de atras— y al agregar el paso del nombre
+// de usuario ninguna de las dos copias se actualizo: la barra se quedaba en 0%
+// (indexOf devolvia -1) y la flecha no encontraba el paso actual, asi que no
+// hacia nada. Una lista, dos lectores.
+export const ORDEN_DE_PASOS: Step[] = ['phone', 'otp', 'cedula', 'name', 'usuario', 'password'];
+
 const getPasswordStrength = (pwd: string): { labelKey: string; color: string; textColor: string; width: string } => {
   if (pwd.length === 0) return { labelKey: '', color: '', textColor: '', width: '0%' };
   let score = 0;
@@ -485,9 +492,18 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
             {/* La regla se dice ANTES de fallar, no despues: el formato lo
                 comparte el servidor y un rechazo al final del asistente seria
                 el peor momento para enterarse. */}
-            <p className={`text-sm mb-6 ${limpio && !valido ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted-dark)]'}`}>
+            <p className={`text-sm mb-2 ${limpio && !valido ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted-dark)]'}`}>
               {t('reg_usuario_regla')}
             </p>
+            {/* El rebote desde el ultimo paso (nombre ya tomado, o rechazado
+                por el servidor) devuelve a esta pantalla. Sin esto, el usuario
+                volvia aqui sin ninguna explicacion de por que. */}
+            {error && (
+              <p className="text-[var(--color-danger)] text-sm mb-6" aria-live="polite">
+                {error}
+              </p>
+            )}
+            {!error && <div className="mb-6" />}
 
             <Button
               variant="primary"
@@ -638,8 +654,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
   };
 
   const getProgress = () => {
-    const steps: Step[] = ['phone', 'otp', 'cedula', 'name', 'password'];
-    return ((steps.indexOf(step) + 1) / steps.length) * 100;
+    return ((ORDEN_DE_PASOS.indexOf(step) + 1) / ORDEN_DE_PASOS.length) * 100;
   };
 
   return (
@@ -649,9 +664,8 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={step === 'phone' ? onBack : () => {
-              const steps: Step[] = ['phone', 'otp', 'cedula', 'name', 'password'];
-              const currentIndex = steps.indexOf(step);
-              if (currentIndex > 0) setStep(steps[currentIndex - 1]);
+              const actual = ORDEN_DE_PASOS.indexOf(step);
+              if (actual > 0) setStep(ORDEN_DE_PASOS[actual - 1]);
             }}
             className="p-2 -ml-2 text-[var(--color-text-muted-dark)] hover:text-white transition-colors"
           >

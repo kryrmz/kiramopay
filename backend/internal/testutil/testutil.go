@@ -233,6 +233,8 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		balance_crc BIGINT DEFAULT 250000000,
 		balance_usd BIGINT DEFAULT 50000,
 		daily_limit BIGINT DEFAULT 100000000,
+		daily_limit_usd BIGINT NOT NULL DEFAULT 19000,
+		monthly_limit_usd BIGINT NOT NULL DEFAULT 95000,
 		monthly_limit BIGINT DEFAULT 500000000,
 		daily_spent BIGINT DEFAULT 0,
 		monthly_spent BIGINT DEFAULT 0,
@@ -241,6 +243,12 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		updated_at TIMESTAMPTZ DEFAULT NOW()
 	);
+	-- Una base local persistida ya tiene la tabla creada, asi que el CREATE de
+	-- arriba es un no-op ahi. Los ALTER van DESPUES de su propio CREATE: puestos
+	-- junto a los de users fallaban con "relation wallets does not exist",
+	-- porque esa tabla se crea mas abajo.
+	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS daily_limit_usd BIGINT NOT NULL DEFAULT 19000;
+	ALTER TABLE wallets ADD COLUMN IF NOT EXISTS monthly_limit_usd BIGINT NOT NULL DEFAULT 95000;
 
 	CREATE TABLE IF NOT EXISTS user_sessions (
 		id UUID PRIMARY KEY,

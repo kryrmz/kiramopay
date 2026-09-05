@@ -25,8 +25,10 @@ func (r *Repository) CreateForUser(ctx context.Context, userID string) error {
 	// an unverified account transact well above its intended cap.
 	basic := kyc.LevelLimits[kyc.LevelBasic]
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO wallets (id, user_id, daily_limit, monthly_limit) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO wallets (id, user_id, daily_limit, monthly_limit, daily_limit_usd, monthly_limit_usd)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		uuid.New().String(), userID, basic.DailyMinor, basic.MonthlyMinor,
+		basic.DailyMinorUSD, basic.MonthlyMinorUSD,
 	)
 	if err != nil {
 		return fmt.Errorf("create wallet: %w", err)
@@ -38,11 +40,13 @@ func (r *Repository) FindByUserID(ctx context.Context, userID string) (*WalletRe
 	w := &WalletRecord{}
 	err := r.db.QueryRow(ctx,
 		`SELECT id, user_id, balance_crc, balance_usd, daily_limit, monthly_limit,
+		        daily_limit_usd, monthly_limit_usd,
 		        daily_spent, monthly_spent, status, version, created_at, updated_at
 		 FROM wallets WHERE user_id = $1`,
 		userID,
 	).Scan(
 		&w.ID, &w.UserID, &w.BalanceCRC, &w.BalanceUSD, &w.DailyLimit, &w.MonthlyLimit,
+		&w.DailyLimitUSD, &w.MonthlyLimitUSD,
 		&w.DailySpent, &w.MonthlySpent, &w.Status, &w.Version, &w.CreatedAt, &w.UpdatedAt,
 	)
 	if err != nil {

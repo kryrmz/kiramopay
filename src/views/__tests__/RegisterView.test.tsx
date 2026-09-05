@@ -48,7 +48,7 @@ vi.mock('@/hooks/useApp', () => ({
   }),
 }));
 
-import { RegisterView } from '../auth/RegisterView';
+import { RegisterView, ORDEN_DE_PASOS } from '../auth/RegisterView';
 
 function renderRegisterView(props?: Partial<{ onComplete: () => void; onBack: () => void; referralCode: string }>) {
   const defaultProps = {
@@ -164,6 +164,31 @@ describe('RegisterView', () => {
     // Sigue en el paso del codigo: sin token no hay avance.
     expect(screen.getByText(/Verifica tu correo/i)).toBeInTheDocument();
   });
+
+  // El orden de los pasos estaba escrito DOS veces a mano —en la barra de
+  // progreso y en la flecha de atras— y al agregar el paso del nombre de
+  // usuario ninguna de las dos se actualizo: indexOf devolvia -1, la barra se
+  // quedaba en 0% y la flecha no hacia nada. Ahora hay una sola lista.
+  it('el orden de los pasos incluye el del nombre de usuario, en su sitio', () => {
+    expect(ORDEN_DE_PASOS).toContain('usuario');
+    // Entre el nombre y la contrasena, que es donde el asistente lo coloca.
+    expect(ORDEN_DE_PASOS.indexOf('usuario')).toBe(ORDEN_DE_PASOS.indexOf('name') + 1);
+    expect(ORDEN_DE_PASOS.indexOf('password')).toBe(ORDEN_DE_PASOS.indexOf('usuario') + 1);
+  });
+
+  it('la flecha de atras funciona en el paso del nombre de usuario', async () => {
+    const user = userEvent.setup();
+    renderRegisterView();
+    await navigateToPasswordStep(user);
+
+    // Desde la contrasena, atras devuelve al nombre de usuario...
+    await user.click(screen.getAllByRole('button')[0]);
+    await waitFor(() => expect(screen.getByText(/Elige tu nombre de usuario/i)).toBeInTheDocument());
+    // ...y desde ahi, al nombre. Con la lista vieja este segundo paso no
+    // encontraba el paso actual y el boton no hacia nada.
+    await user.click(screen.getAllByRole('button')[0]);
+    await waitFor(() => expect(screen.getByPlaceholderText(/^Nombre$/i)).toBeInTheDocument());
+  }, 30000);
 
   it('should progress through all steps to password', async () => {
     const user = userEvent.setup();

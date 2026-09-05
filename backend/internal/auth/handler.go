@@ -74,8 +74,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 		// La cuenta si pide contrasena. Codigo propio para que la pantalla la
 		// pida, en vez de mostrar "credenciales incorrectas" antes de que el
-		// usuario haya escrito nada. No revela mas de lo que ya revela intentar:
-		// con la bandera de demostracion apagada, TODA cuenta responde esto.
+		// usuario haya escrito nada.
+		//
+		// No filtra si la cuenta existe: el servicio devuelve ESTE mismo error
+		// para un identificador que no corresponde a ninguna cuenta. Si
+		// distinguiera, comparar los dos codigos convertiria esta ruta —publica
+		// y sin gastar intentos— en un listador de cuentas.
 		if errors.Is(err, ErrPasswordRequired) {
 			noStore(w)
 			response.Error(w, http.StatusUnauthorized, "PASSWORD_REQUIRED", "password required")

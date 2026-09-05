@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"fmt"
@@ -97,7 +98,7 @@ func (s *Service) CreateTransaction(ctx context.Context, userID string, req *Cre
 		if req.Currency == "USD" && w.BalanceUSD < totalCost {
 			return nil, fmt.Errorf("insufficient balance")
 		}
-		if err := s.checkDailyLimit(ctx, userID, req.Currency, req.Amount, w.DailyLimit); err != nil {
+		if err := s.checkDailyLimit(ctx, userID, req.Currency, req.Amount, w); err != nil {
 			return nil, err
 		}
 
@@ -333,7 +334,7 @@ func (s *Service) CreateTransfer(ctx context.Context, req *CreateTransferRequest
 	if req.Currency == "USD" && senderWallet.BalanceUSD < senderTotal {
 		return nil, nil, fmt.Errorf("insufficient balance")
 	}
-	if err := s.checkDailyLimit(ctx, req.FromUserID, req.Currency, req.Amount, senderWallet.DailyLimit); err != nil {
+	if err := s.checkDailyLimit(ctx, req.FromUserID, req.Currency, req.Amount, senderWallet); err != nil {
 		return nil, nil, err
 	}
 
@@ -471,6 +472,11 @@ var ErrMFARequired = errors.New("mfa challenge required")
 // mensaje a nadie.
 var ErrDailyLimitExceeded = errors.New("daily spending limit exceeded")
 
+// ErrMonedaSinTope: se intento sacar dinero en una moneda para la que no hay
+// tope diario definido. Dejarla pasar "sin tope" seria el mismo agujero que el
+// tope por moneda vino a cerrar, con otro nombre.
+var ErrMonedaSinTope = errors.New("no daily limit defined for this currency")
+
 // ErrInsufficientMerchantBalance rejects a withdrawal larger than the shop's
 // journal-derived balance. The exact string reaches the client as the 400
 // message, so keep it stable.
@@ -515,12 +521,39 @@ func (s *Service) CheckDailyLimit(ctx context.Context, userID, currency string, 
 	if err != nil {
 		return fmt.Errorf("wallet not found")
 	}
-	return s.checkDailyLimit(ctx, userID, currency, amountMinor, w.DailyLimit)
+	return s.checkDailyLimit(ctx, userID, currency, amountMinor, w)
+}
+
+// topeDiarioDe elige el tope de la MONEDA del movimiento.
+//
+// Antes se pasaba siempre w.DailyLimit, que esta en centimos de COLON, y se
+// comparaba contra el monto viniera en la moneda que viniera. En dolares eso no
+// frenaba nada: USD 5.000 son 500.000 centimos, muy por debajo de los
+// 10.000.000 de un tope basico, asi que una billetera en dolares podia mover
+// unas 26 veces su tope — por transferencia y por escrow por igual.
+//
+// Devuelve false para una moneda sin tope definido. No hay conversion a
+// proposito: el tipo de cambio de la base esta congelado desde su semilla y
+// derivar un tope de el seria heredar ese problema.
+func topeDiarioDe(w *wallet.WalletRecord, currency string) (int64, bool) {
+	switch strings.ToUpper(currency) {
+	case "CRC":
+		return w.DailyLimit, true
+	case "USD":
+		return w.DailyLimitUSD, true
+	}
+	return 0, false
 }
 
 // checkDailyLimit es la version interna, para los llamantes que ya cargaron la
 // billetera y no tienen por que volver a consultarla.
-func (s *Service) checkDailyLimit(ctx context.Context, userID, currency string, amountMinor, dailyLimit int64) error {
+func (s *Service) checkDailyLimit(ctx context.Context, userID, currency string, amountMinor int64, w *wallet.WalletRecord) error {
+	dailyLimit, conocida := topeDiarioDe(w, currency)
+	if !conocida {
+		// Una moneda para la que no hay tope definido no puede salir "sin
+		// tope": seria exactamente el agujero que esto cierra, con otro nombre.
+		return fmt.Errorf("%w: %s", ErrMonedaSinTope, currency)
+	}
 	if dailyLimit <= 0 {
 		return nil // sin tope configurado
 	}

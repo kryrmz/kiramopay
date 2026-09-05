@@ -203,11 +203,14 @@ export const useAuthStore = create<AuthState>()(
         // Igual que en logout: sesion invalidada (401 sin refresh posible)
         // implica soltar los datos del usuario, no solo los tokens.
         limpiarDatosDeUsuario();
-        // Y a diferencia de un cierre de sesion normal, aqui la cuenta PERDIO
-        // el acceso: la tarjeta de acceso rapido y la credencial del llavero
-        // ya no sirven para entrar, asi que dejarlas solo deja el nombre de esa
-        // persona a la vista y una contrasena guardada sin proposito.
-        olvidarUltimoAcceso();
+        // SOLO cuando la cuenta perdio el acceso de verdad. forceLogout es
+        // tambien el manejador generico de 401 cuyo refresco falla, y el
+        // servidor corta por inactividad a los 30 minutos: sin esta condicion,
+        // dejar la aplicacion en segundo plano media hora borraba la tarjeta de
+        // acceso rapido y la credencial de la huella, y habia que teclear la
+        // contrasena completa y volver a configurarla. Una sesion que vence no
+        // es una cuenta revocada: la credencial guardada sigue sirviendo.
+        if (reason === 'blocked') olvidarUltimoAcceso();
         set({
           isAuthenticated: false,
           sessionHint: false,

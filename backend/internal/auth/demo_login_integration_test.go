@@ -174,3 +174,31 @@ func TestLogin_FallarContraUnUsuarioNoBloqueaAOtraCuenta(t *testing.T) {
 		t.Fatalf("bloquear a una cuenta dejo fuera a otra distinta: %v", err)
 	}
 }
+
+// EL ORACULO QUE ESTO CIERRA: el sondeo con contrasena vacia respondia
+// PASSWORD_REQUIRED cuando la cuenta existia y AUTH_FAILED cuando no. Dos
+// codigos distintos, en una ruta publica que ademas no gasta intentos, es un
+// listador de cuentas: se puede comprobar una por una que cedulas, telefonos,
+// correos y nombres de usuario tienen cuenta en KiramoPay.
+//
+// Todo el resto de Login esta construido para no filtrar eso. Esta rama tiene
+// que respetarlo igual.
+func TestLogin_ElSondeoNoDiceSiLaCuentaExiste(t *testing.T) {
+	for _, bandera := range []bool{false, true} {
+		t.Run(map[bool]string{false: "bandera apagada", true: "bandera encendida"}[bandera], func(t *testing.T) {
+			svc, pool, _ := servicioConDemo(t, bandera)
+			sembrarConUsuario(t, pool, "702650930", "keilor", false)
+			ctx := context.Background()
+
+			_, errExiste := svc.Login(ctx, &auth.LoginRequest{Identifier: "keilor", Password: ""}, emptyCtx)
+			_, errNoExiste := svc.Login(ctx, &auth.LoginRequest{Identifier: "noexiste", Password: ""}, emptyCtx)
+
+			if !errors.Is(errExiste, auth.ErrPasswordRequired) {
+				t.Fatalf("cuenta existente: %v, esperaba ErrPasswordRequired", errExiste)
+			}
+			if !errors.Is(errNoExiste, auth.ErrPasswordRequired) {
+				t.Fatalf("cuenta inexistente: %v — el codigo distinto delata que la otra SI existe", errNoExiste)
+			}
+		})
+	}
+}

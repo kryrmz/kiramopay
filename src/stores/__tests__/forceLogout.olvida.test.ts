@@ -33,6 +33,22 @@ describe('forceLogout', () => {
     expect(useAuthStore.getState().logoutReason).toBe('blocked');
   });
 
+  // EL CASO QUE FALTABA, y que es el que de verdad ocurre a diario: forceLogout
+  // es TAMBIEN el manejador generico de 401 cuyo refresco falla, y el servidor
+  // corta por inactividad a los 30 minutos. Sin condicionarlo al motivo, dejar
+  // la aplicacion en segundo plano media hora borraba la tarjeta de acceso
+  // rapido y la credencial de la huella. Una sesion que vence no es una cuenta
+  // revocada.
+  it('una sesion vencida NO borra el acceso rapido', () => {
+    useAuthStore.getState().forceLogout();
+
+    expect(localStorage.getItem(CLAVE_ULTIMO_IDENTIFICADOR)).toBe('keilor');
+    expect(localStorage.getItem(CLAVE_ULTIMO_NOMBRE)).toBe('Keilor Martinez');
+    expect(mocks.deleteCredentials).not.toHaveBeenCalled();
+    // Pero la sesion si termina.
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
   // Y un cierre de sesion NORMAL conserva el acceso rapido: es justo lo que el
   // usuario espera encontrar la proxima vez que abre la aplicacion.
   it('un cierre de sesion normal conserva el acceso rapido', () => {

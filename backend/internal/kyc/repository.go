@@ -196,9 +196,10 @@ func (r *Repository) ApplyApproval(ctx context.Context, userID string, level int
 		return fmt.Errorf("update user kyc: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
-		`UPDATE wallets SET daily_limit = $2, monthly_limit = $3, updated_at = NOW()
+		`UPDATE wallets SET daily_limit = $2, monthly_limit = $3,
+		        daily_limit_usd = $4, monthly_limit_usd = $5, updated_at = NOW()
 		 WHERE user_id = $1::uuid`,
-		userID, lim.DailyMinor, lim.MonthlyMinor,
+		userID, lim.DailyMinor, lim.MonthlyMinor, lim.DailyMinorUSD, lim.MonthlyMinorUSD,
 	); err != nil {
 		return fmt.Errorf("update wallet limits: %w", err)
 	}

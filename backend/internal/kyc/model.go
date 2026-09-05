@@ -31,14 +31,24 @@ const (
 // LevelLimits maps a KYC level to wallet daily/monthly limits in centimos.
 // Unverified users are deliberately constrained; verification raises the cap.
 type Limits struct {
+	// En centimos de COLON.
 	DailyMinor   int64
 	MonthlyMinor int64
+	// En centimos de DOLAR. Separados a proposito: comparar un monto en
+	// dolares contra un tope en colones no frena nada — USD 5.000 son 500.000
+	// centimos, muy por debajo de los 10.000.000 de un tope basico.
+	DailyMinorUSD   int64
+	MonthlyMinorUSD int64
 }
 
+// Los tramos en dolares son propios, no derivados del tope en colones con un
+// tipo de cambio: el que hay en la base esta congelado desde su semilla y
+// derivar de el seria heredar ese problema. Espeja lo que ya hace mfa, que
+// tiene umbrales separados por moneda en vez de convertir.
 var LevelLimits = map[int]Limits{
-	LevelBasic:    {DailyMinor: 10_000_000, MonthlyMinor: 50_000_000},     // ₡100k / ₡500k
-	LevelVerified: {DailyMinor: 50_000_000, MonthlyMinor: 500_000_000},    // ₡500k / ₡5M
-	LevelComplete: {DailyMinor: 200_000_000, MonthlyMinor: 2_000_000_000}, // ₡2M / ₡20M
+	LevelBasic:    {DailyMinor: 10_000_000, MonthlyMinor: 50_000_000, DailyMinorUSD: 19_000, MonthlyMinorUSD: 95_000},         // ₡100k / ₡500k · $190 / $950
+	LevelVerified: {DailyMinor: 50_000_000, MonthlyMinor: 500_000_000, DailyMinorUSD: 95_000, MonthlyMinorUSD: 950_000},       // ₡500k / ₡5M · $950 / $9.5k
+	LevelComplete: {DailyMinor: 200_000_000, MonthlyMinor: 2_000_000_000, DailyMinorUSD: 380_000, MonthlyMinorUSD: 3_800_000}, // ₡2M / ₡20M · $3.8k / $38k
 }
 
 // Verification is one KYC submission + its review state.

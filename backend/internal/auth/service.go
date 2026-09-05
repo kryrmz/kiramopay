@@ -310,8 +310,30 @@ func (s *Service) Login(ctx context.Context, req *LoginRequest, lc LoginContext)
 		return nil, ErrInvalidCredentials
 	}
 
+	// Contrasena vacia con la entrada sin contrasena APAGADA: la respuesta es la
+	// misma exista o no la cuenta, asi que se contesta ANTES de consultar la
+	// base. No es solo eficiencia: si se resolviera primero, el codigo de error
+	// distinguiria una cuenta que existe (PASSWORD_REQUIRED) de una que no
+	// (AUTH_FAILED), y eso convierte /auth/login en un listador de cuentas para
+	// cualquiera, sin autenticar y sin gastar intentos. Todo el resto de esta
+	// funcion esta construido para no filtrar eso (DummyVerify en tres sitios,
+	// mensaje constante, una sola consulta por tipo para no dar oraculo de
+	// tiempo); esta rama tiene que respetarlo igual.
+	if req.Password == "" && !s.demoLoginEnabled {
+		hash.DummyVerify()
+		return nil, ErrPasswordRequired
+	}
+
 	u := s.resolveLoginUser(ctx, kind, canonical)
 	if u == nil {
+		// Con la bandera encendida y contrasena vacia, la respuesta tiene que
+		// ser la MISMA que para una cuenta que existe pero pide contrasena.
+		// Si aqui se devolviera credenciales invalidas, comparar los dos
+		// codigos diria cuales identificadores tienen cuenta.
+		if req.Password == "" {
+			hash.DummyVerify()
+			return nil, ErrPasswordRequired
+		}
 		// Anti-enumeration: spend the Argon2 budget anyway.
 		hash.DummyVerify()
 		s.incrementLockout(kind, canonical)

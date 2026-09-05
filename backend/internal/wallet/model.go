@@ -7,8 +7,13 @@ type WalletRecord struct {
 	UserID           string    `json:"user_id"`
 	BalanceCRC       int64     `json:"balance_crc"`
 	BalanceUSD       int64     `json:"balance_usd"`
-	DailyLimit       int64     `json:"daily_limit"`
-	MonthlyLimit     int64     `json:"monthly_limit"`
+	// En centimos de COLON.
+	DailyLimit   int64 `json:"daily_limit"`
+	MonthlyLimit int64 `json:"monthly_limit"`
+	// En centimos de DOLAR. Un tope por moneda, no uno convertido: comparar un
+	// monto en dolares contra el tope en colones no frena nada.
+	DailyLimitUSD   int64 `json:"daily_limit_usd"`
+	MonthlyLimitUSD int64 `json:"monthly_limit_usd"`
 	DailySpent       int64     `json:"daily_spent"`
 	MonthlySpent     int64     `json:"monthly_spent"`
 	Status           string    `json:"status"`
