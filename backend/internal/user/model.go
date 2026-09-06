@@ -33,8 +33,21 @@ type UserRecord struct {
 }
 
 type UpdateProfileRequest struct {
-	FirstName        *string `json:"first_name,omitempty"`
-	LastName         *string `json:"last_name,omitempty"`
-	Email            *string `json:"email,omitempty"`
+	FirstName         *string `json:"first_name,omitempty"`
+	LastName          *string `json:"last_name,omitempty"`
+	Email             *string `json:"email,omitempty"`
 	ProfilePictureURL *string `json:"profile_picture_url,omitempty"`
+	// CurrentPassword es OBLIGATORIA para cambiar el correo, y solo para eso.
+	//
+	// El correo es el destino del enlace de recuperacion, asi que quien lo
+	// cambia puede fijarse una contrasena nueva y quedarse con la cuenta. Sin
+	// esta comprobacion la cadena era: conseguir una sesion -> cambiar el correo
+	// (no pedia nada) -> pedir recuperacion -> la cuenta es suya PARA SIEMPRE,
+	// y el duenno legitimo queda expulsado porque el reset revoca sus sesiones.
+	//
+	// Se pide la contrasena y no que el correo este verificado: exigir lo
+	// segundo dejaria sin recuperacion a quien cambio su correo y despues
+	// olvido la contrasena. Esto no le quita el camino a nadie que sepa su
+	// contrasena.
+	CurrentPassword string `json:"current_password,omitempty"`
 }
