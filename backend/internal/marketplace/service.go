@@ -15,8 +15,13 @@ import (
 
 // HistoryRecorder makes a marketplace charge visible in the user's transaction
 // list. Best-effort: failing to record never fails the order.
+// HistoryRecorder anota el movimiento en el historial del usuario y presta el
+// control de tope diario del servicio de transacciones. Van juntas: lo que
+// debita la billetera tiene que anotarse donde el tope se cuenta Y consultar
+// ese mismo tope, o el tope deja de significar lo que dice.
 type HistoryRecorder interface {
 	RecordHistory(ctx context.Context, userID string, req *transaction.CreateTransactionRequest) error
+	CheckDailyLimit(ctx context.Context, userID, currency string, amountMinor int64) error
 }
 
 // ErrSinIntegracion se devuelve al intentar COBRAR un viaje o un pedido sin
@@ -77,6 +82,13 @@ func (s *Service) chargeWallet(ctx context.Context, userID string, amountMinor i
 	}
 	if bal < amountMinor {
 		return fmt.Errorf("insufficient balance")
+	}
+	// Mismo tope diario que las transferencias y el escrow: esto saca dinero de
+	// la billetera contra una contraparte externa igual que ellos.
+	if s.history != nil {
+		if err := s.history.CheckDailyLimit(ctx, userID, "CRC", amountMinor); err != nil {
+			return err
+		}
 	}
 	if _, err := s.ledger.Post(ctx, &ledger.Posting{
 		Description:    label,

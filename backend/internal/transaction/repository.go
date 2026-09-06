@@ -258,6 +258,13 @@ func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error 
 // savings_deposit queda fuera a proposito: mueve el dinero a SYSTEM:SAVINGS,
 // que sigue siendo del usuario y puede retirar cuando quiera. No sale de su
 // control, asi que no es gasto.
+//
+// payout_sent y marketplace SI estan: los dos debitan la billetera del usuario
+// contra una contraparte externa. Hoy ninguno de los dos opera en produccion
+// —los rieles de payout no se registran y los cobros del marketplace se
+// rechazan—, pero la lista describe lo que ES una salida, no lo que esta
+// encendido: el dia que se enciendan tienen que contar desde el primer
+// movimiento, no desde que alguien se acuerde de agregarlos aqui.
 // sqlSalidaDiaria esta en una constante, y no incrustada en la llamada, para
 // que una prueba pueda leer LA MISMA cadena que se ejecuta y comprobar que la
 // lista de tipos no se quede corta.
@@ -267,7 +274,7 @@ const sqlSalidaDiaria = `SELECT COALESCE(SUM(amount), 0)
 		   AND currency = $2
 		   AND status = 'completed'
 		   AND created_date = CURRENT_DATE
-		   AND type IN ('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy','escrow_fund')`
+		   AND type IN ('sinpe_send','qr_payment','bill_payment','recharge','withdrawal','p2p_send','crypto_buy','escrow_fund','payout_sent','marketplace')`
 
 func (r *Repository) DailyOutgoingMinor(ctx context.Context, userID, currency string) (int64, error) {
 	var total int64
