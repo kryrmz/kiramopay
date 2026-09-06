@@ -53,6 +53,11 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 				"una cuenta de demostracion no puede cambiar sus datos")
 			return
 		}
+		if errors.Is(err, ErrContrasenaRequerida) {
+			response.Error(w, http.StatusForbidden, "PASSWORD_REQUIRED",
+				"se requiere la contrasena vigente para cambiar el correo")
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
 		return
 	}

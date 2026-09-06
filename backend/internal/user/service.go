@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/kiramopay/backend/pkg/hash"
+	"strings"
 	"errors"
 	"context"
 	"fmt"
@@ -33,6 +35,10 @@ func (s *Service) GetProfile(ctx context.Context, userID string) (*UserRecord, e
 // persona: no tiene por que poder cambiar su propia identidad.
 var ErrCuentaDeDemostracion = errors.New("una cuenta de demostracion no puede cambiar su identidad ni su contrasena")
 
+// ErrContrasenaRequerida: se intento cambiar el correo sin presentar la
+// contrasena vigente, o presentando una equivocada.
+var ErrContrasenaRequerida = errors.New("se requiere la contrasena vigente para cambiar el correo")
+
 func (s *Service) UpdateProfile(ctx context.Context, userID string, req *UpdateProfileRequest) (*UserRecord, error) {
 	actual, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -40,6 +46,17 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, req *UpdateP
 	}
 	if actual.DemoLogin {
 		return nil, ErrCuentaDeDemostracion
+	}
+	// Cambiar el correo exige la contrasena vigente. Es el destino del enlace de
+	// recuperacion: quien lo cambia puede fijarse una contrasena nueva y quedarse
+	// con la cuenta, expulsando al duenno (el reset revoca todas sus sesiones).
+	// El resto de los campos del perfil no mueven esa puerta y siguen sin pedir
+	// nada.
+	if req.Email != nil && strings.TrimSpace(*req.Email) != actual.Email {
+		valido, err := hash.VerifyPin(req.CurrentPassword, actual.PasswordHash)
+		if err != nil || !valido {
+			return nil, ErrContrasenaRequerida
+		}
 	}
 	if err := s.repo.UpdateProfile(ctx, userID, req); err != nil {
 		return nil, fmt.Errorf("update profile: %w", err)
